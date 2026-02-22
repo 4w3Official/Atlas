@@ -1,0 +1,25 @@
+name: Atlas
+version: ${version}
+
+api-version: "1.21"
+main: dev.awe.atlas.Atlas
+loader: dev.awe.atlas.Loader
+
+description: just a simple funny game mode with pinatas
+author: Niklas '4w3' Schumacher
+website: https://4w3.dev
+
+dependencies:
+  server:
+    PlaceholderAPI:
+      load: BEFORE
+      required: false
+    Votifier:
+      load: BEFORE
+      required: false
+    ModelEngine:
+      load: BEFORE
+      required: false
+    BetterModel:
+      load: BEFORE
+      required: false

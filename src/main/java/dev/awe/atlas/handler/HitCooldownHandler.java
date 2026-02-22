@@ -1,0 +1,81 @@
+package dev.awe.atlas.handler;
+
+import dev.awe.atlas.Atlas;
+import dev.awe.atlas.config.ConfigManager;
+import dev.awe.atlas.config.settings.PinataConfig.PinataConfiguration;
+import dev.awe.atlas.manager.PinataManager;
+import dev.awe.atlas.util.MessageUtils;
+import dev.awe.atlas.util.NamespacedKeys;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
+import org.bukkit.persistence.PersistentDataHolder;
+import org.bukkit.persistence.PersistentDataType;
+
+public class HitCooldownHandler {
+    private final ConfigManager config;
+    private final MessageUtils messageUtils;
+    private final PinataManager pinataManager;
+
+    public HitCooldownHandler(Atlas plugin, PinataManager pinataManager) {
+        this.config = plugin.getConfiguration();
+        this.messageUtils = plugin.getMessageUtils();
+        this.pinataManager = pinataManager;
+    }
+
+    public boolean isOnCooldown(Player player, LivingEntity pinata) {
+        PinataConfiguration pinataConfig = pinataManager.getPinataConfig(pinata);
+        var cooldownConfig = pinataConfig.interaction.hitCooldown;
+        double cooldownSeconds = cooldownConfig.duration;
+        if (cooldownSeconds <= 0) return false;
+
+        boolean global = cooldownConfig.global;
+        long now = System.currentTimeMillis();
+
+        PersistentDataHolder target = global ? pinata : player;
+
+        long nextHit = target.getPersistentDataContainer()
+                .getOrDefault(NamespacedKeys.PINATA_HIT_COOLDOWN, PersistentDataType.LONG, 0L);
+
+        if (now < nextHit) {
+            sendCooldownMessage(player, nextHit - now, pinataConfig);
+            return true;
+        }
+
+        return false;
+    }
+
+    public void applyCooldown(Player player, LivingEntity pinata) {
+        PinataConfiguration pinataConfig = pinataManager.getPinataConfig(pinata);
+
+        var cooldownConfig = pinataConfig.interaction.hitCooldown;
+        double cooldownSeconds = cooldownConfig.duration;
+        if (cooldownSeconds <= 0) return;
+
+        boolean global = cooldownConfig.global;
+        long cooldownMillis = (long) (cooldownSeconds * 1000L);
+        long now = System.currentTimeMillis();
+
+        PersistentDataHolder target = global ? pinata : player;
+
+        target.getPersistentDataContainer()
+                .set(NamespacedKeys.PINATA_HIT_COOLDOWN, PersistentDataType.LONG, now + cooldownMillis);
+    }
+
+    private void sendCooldownMessage(Player player, long remainingMillis, PinataConfiguration pinataConfig) {
+        String msg = config.getMessageConfig().pinata.gameplay.hitCooldown;
+        if (msg == null || msg.isEmpty()) return;
+
+        double remainingSeconds = remainingMillis / 1000.0;
+
+        var component =
+                messageUtils.parse(player, msg, messageUtils.tag("countdown", String.format("%.1f", remainingSeconds)));
+
+        String displayType = pinataConfig.interaction.hitCooldown.notificationType;
+
+        switch (displayType.toLowerCase()) {
+            case "action_bar" -> player.sendActionBar(component);
+            case "none" -> {}
+            default -> player.sendMessage(component);
+        }
+    }
+}

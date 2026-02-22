@@ -1,0 +1,90 @@
+package dev.awe.atlas.behavior;
+
+import com.destroystokyo.paper.entity.ai.Goal;
+import com.destroystokyo.paper.entity.ai.GoalKey;
+import com.destroystokyo.paper.entity.ai.GoalType;
+import dev.awe.atlas.Atlas;
+import dev.awe.atlas.config.settings.PinataConfig.PinataConfiguration;
+import java.util.EnumSet;
+import java.util.concurrent.ThreadLocalRandom;
+import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
+import org.bukkit.block.Block;
+import org.bukkit.entity.Mob;
+
+public class PinataRoamGoal implements Goal<Mob> {
+    private final Atlas plugin;
+    private final Mob mob;
+    private final GoalKey<Mob> key;
+    private final Location anchor;
+
+    public PinataRoamGoal(Atlas plugin, Mob mob) {
+        this.plugin = plugin;
+        this.mob = mob;
+        this.anchor = mob.getLocation().clone();
+        this.key = GoalKey.of(Mob.class, new NamespacedKey(plugin, "pinata_roam"));
+    }
+
+    @Override
+    public boolean shouldActivate() {
+        if (mob.getPathfinder().hasPath()) return false;
+        PinataConfiguration config = plugin.getPinataManager().getPinataConfig(mob);
+        return ThreadLocalRandom.current().nextInt(100) < config.behavior.movement.roam.chance;
+    }
+
+    @Override
+    public boolean shouldStayActive() {
+        return mob.getPathfinder().hasPath();
+    }
+
+    @Override
+    public void start() {
+        PinataConfiguration config = plugin.getPinataManager().getPinataConfig(mob);
+
+        double rangeX = config.behavior.movement.roam.radius.x;
+        int rangeY = (int) config.behavior.movement.roam.radius.y;
+        double rangeZ = config.behavior.movement.roam.radius.z;
+        double speed = config.behavior.movement.roam.speed;
+
+        double x = (ThreadLocalRandom.current().nextDouble() * 2 - 1) * rangeX;
+        double z = (ThreadLocalRandom.current().nextDouble() * 2 - 1) * rangeZ;
+
+        int targetX = anchor.getBlockX() + (int) x;
+        int targetZ = anchor.getBlockZ() + (int) z;
+        int currentY = mob.getLocation().getBlockY();
+
+        Block validTargetBlock = null;
+
+        for (int dy = rangeY; dy >= -rangeY; dy--) {
+            Block candidate = mob.getWorld().getBlockAt(targetX, currentY + dy, targetZ);
+            Block above = candidate.getRelative(0, 1, 0);
+            Block twoAbove = candidate.getRelative(0, 2, 0);
+
+            if (candidate.getType().isSolid()
+                    && !candidate.isLiquid()
+                    && above.isPassable()
+                    && !above.isLiquid()
+                    && twoAbove.isPassable()) {
+                validTargetBlock = candidate;
+                break;
+            }
+        }
+
+        if (validTargetBlock != null) {
+            Location target = validTargetBlock.getLocation().add(0.5, 1.1, 0.5);
+            if (target.getBlock().isPassable()) {
+                mob.getPathfinder().moveTo(target, speed);
+            }
+        }
+    }
+
+    @Override
+    public GoalKey<Mob> getKey() {
+        return key;
+    }
+
+    @Override
+    public EnumSet<GoalType> getTypes() {
+        return EnumSet.of(GoalType.MOVE, GoalType.LOOK);
+    }
+}

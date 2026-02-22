@@ -1,0 +1,107 @@
+package dev.awe.atlas.config;
+
+import de.exlll.configlib.ConfigLib;
+import de.exlll.configlib.NameFormatters;
+import de.exlll.configlib.YamlConfigurationProperties;
+import de.exlll.configlib.YamlConfigurations;
+import dev.awe.atlas.Atlas;
+import dev.awe.atlas.config.settings.MainConfig;
+import dev.awe.atlas.config.settings.MainConfig.MainConfiguration;
+import dev.awe.atlas.config.settings.MessageConfig;
+import dev.awe.atlas.config.settings.MessageConfig.MessageConfiguration;
+import dev.awe.atlas.config.settings.PinataConfig;
+import dev.awe.atlas.config.settings.PinataConfig.PinataConfiguration;
+import java.io.File;
+import java.nio.file.Path;
+import java.util.Map;
+
+public class ConfigManager {
+    private final File dataFolder;
+    private final Atlas plugin;
+
+    private MainConfiguration mainConfig;
+    private Map<String, PinataConfiguration> pinataConfigs;
+    private MessageConfiguration messageConfig;
+
+    private static final YamlConfigurationProperties PROPERTIES = ConfigLib.BUKKIT_DEFAULT_PROPERTIES.toBuilder()
+            .setNameFormatter(NameFormatters.LOWER_KEBAB_CASE)
+            .build();
+
+    public ConfigManager(Atlas plugin, File dataFolder) {
+        this.dataFolder = dataFolder;
+        this.plugin = plugin;
+        this.pinataConfigs = new java.util.HashMap<>();
+    }
+
+    public void loadConfig() {
+        this.mainConfig = MainConfig.load(dataFolder);
+        loadPinataConfigs();
+    }
+
+    private void loadPinataConfigs() {
+        pinataConfigs.clear();
+
+        File pinataFolder = new File(dataFolder, "pinatas");
+        if (!pinataFolder.exists()) {
+            pinataFolder.mkdirs();
+        }
+
+        File defaultPinata = new File(pinataFolder, "default.yml");
+        if (!defaultPinata.exists()) {
+            PinataConfig.load(defaultPinata);
+        }
+
+        File[] files = pinataFolder.listFiles((dir, name) -> name.endsWith(".yml"));
+
+        if (files != null) {
+            for (File file : files) {
+                String fileName = file.getName();
+                if (fileName.contains(" ")) {
+                    plugin.getLogger()
+                            .warning("Pinata config file '"
+                                    + fileName
+                                    + "' contains spaces in its name and will be skipped.");
+                    continue;
+                }
+                String id = fileName.substring(0, fileName.lastIndexOf('.'));
+                PinataConfiguration config = PinataConfig.load(file);
+                pinataConfigs.put(id, config);
+            }
+        }
+    }
+
+    public void loadMessages() {
+        this.messageConfig = MessageConfig.load(dataFolder);
+    }
+
+    public void saveConfig() {
+        Path settingsPath = new File(dataFolder, "config.yml").toPath();
+        YamlConfigurations.save(settingsPath, MainConfiguration.class, mainConfig, PROPERTIES);
+
+        for (Map.Entry<String, PinataConfiguration> entry : pinataConfigs.entrySet()) {
+            Path path = new File(dataFolder, "pinatas/" + entry.getKey() + ".yml").toPath();
+            YamlConfigurations.save(path, PinataConfiguration.class, entry.getValue(), PROPERTIES);
+        }
+    }
+
+    public void saveMessages() {
+        Path path = new File(dataFolder, "messages.yml").toPath();
+        YamlConfigurations.save(path, MessageConfiguration.class, messageConfig, PROPERTIES);
+    }
+
+    public MainConfiguration getMainConfig() {
+        return mainConfig;
+    }
+
+    public PinataConfiguration getPinataConfig(String id) {
+        return pinataConfigs.get(id);
+    }
+
+    public Map<String, PinataConfiguration> getPinataConfigs() {
+        return pinataConfigs;
+    }
+
+    public MessageConfiguration getMessageConfig() {
+        return messageConfig;
+    }
+}
